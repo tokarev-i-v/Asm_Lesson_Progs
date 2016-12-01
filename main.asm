@@ -29,6 +29,38 @@ BigNumber ends
 
 .code
 
+bignum_print proc uses ebx edx ecx edi esi bignum_p: dword
+	local i: dword
+	mov ebx, [bignum_p]
+	mov ecx, [BigNumber ptr [ebx]].Len
+	dec ecx
+	mov [i], ecx
+
+	.if [i] == 0
+		mov ecx, [BigNumber ptr [ebx]].Num_p
+		mov ecx, [ecx]
+		invoke crt_printf, $CTA0("%08X \n"), ecx
+		mov eax, 0
+		ret
+	.endif
+	
+	.while 1
+		mov ebx, [bignum_p]
+		mov ebx, [BigNumber ptr [ebx]].Num_p
+		mov eax, [i]
+		mov ecx, [ebx+eax*4]
+		invoke crt_printf, $CTA0("%08X "), ecx
+		.if [i] == 0
+			.break
+		.endif
+		dec [i]
+	.endw
+
+	invoke crt_printf, $CTA0("\n")
+	mov eax, 0
+	ret
+bignum_print endp
+
 
 bignum_init_null proc uses edx ebx edi bignum_p: dword, len: dword
 	local i:dword
@@ -68,6 +100,7 @@ bignum_set_str proc bignum_p: dword, str_p: dword
 	local temp: dword
 	; знак нового числа
 	local signum: byte
+	local rest: dword
 	local StrLen: dword
 	local Str_p: dword
 	local tstr[11]: byte
@@ -77,7 +110,7 @@ bignum_set_str proc bignum_p: dword, str_p: dword
 	; записываем значение знака в структуру
 	; записываем значение знака
 	mov ebx, [str_p]
-	mov ecx, [BN_p]
+	mov ecx, [bignum_p]
 	.if byte ptr [ebx+0] == '-'
 		mov [signum], 1
 		mov [BigNumber ptr [ecx]].Sig, 1
@@ -108,9 +141,10 @@ bignum_set_str proc bignum_p: dword, str_p: dword
 
 	; выделяем память под новое число
 	invoke crt_strlen, [Str_p]
+	mov ecx, 8
 	mov [StrLen], eax
 	mov edx, 0
-	div 8 
+	div ecx
 	;теперь целая часть сохранилась в eax, остаток - edx
 	inc eax ; увеличиваем, чтобы учесть остаток
 	mov ebx, sizeof(dword)
@@ -124,6 +158,9 @@ bignum_set_str proc bignum_p: dword, str_p: dword
 	; теперь записываем значение длины элементов числа
 	mov eax, [StrLen]
 	mov edx, 0
+	mov ecx, 8
+	div ecx
+	mov [rest], edx
 	.if(edx != 0)
 		inc eax		
 	.endif
@@ -131,53 +168,95 @@ bignum_set_str proc bignum_p: dword, str_p: dword
 	; записали значение длины
 
 	; теперь заполняем 0 все разряды
-	mov ebx, [BN_p] ; вначале получаем адрес структуры
+	mov ebx, [bignum_p] ; вначале получаем адрес структуры
 	mov edi, [BigNumber ptr [ebx]].Len ;записываем значение длины
-	mov ebx, [BigNumber ptr [ebx].Num_p; теперь записываем в ebx адрес
+	mov ebx, [BigNumber ptr [ebx]].Num_p; теперь записываем в ebx адрес
 	; самого числа
 	mov [i], 0 ; первый элемент
 	;mov [k], 4 ; множитель
 	.while [i] < edi
 		mov eax, [i]
-		mul 4
-		mov  [ebx+eax], 0
+		mov ecx, 4
+		mul ecx
+		mov ecx, 0
+		mov  [ebx+eax], ecx
 		inc [i]
 	.endw
 	; заполнили 0 разряды!
 
 	; теперь заполняем слова
-	mov ebx, [BN_p] ; вначале получаем адрес структуры
-	mov ebx, [BigNumber ptr [ebx].Num_p; перезаписываем содержимое ebx
 	mov [i], 0 ; первый элемент
 	.while [StrLen] > 7
 		mov [k], 0
 		.while [k] < 8
 			mov eax, [StrLen]
-			sub eax, k
+			sub eax, [k]
 			dec eax
 			mov edx, [Str_p]
-			mov byte ptr [temp], byte ptr [edx+eax]
+			mov cl, byte ptr [edx+eax]
+			mov byte ptr [temp], cl
 
 			mov edx, 7
 			sub edx, k
-			mov tstr[edx], byte ptr [temp]
+			mov cl, byte ptr [temp]
+			mov byte ptr tstr[edx], cl ; ВОТ ТУТ МОЖЕТ БЫТЬ КОСЯК!!!!!!!!!!!
 			
 			inc [k]
 		.endw
-
+		
 		sub [StrLen], 8
-		mov tstr[k], 0
-		invoke crt_strtoul, NULL, 16
+		mov ecx, [k]
+		mov byte ptr tstr[ecx], byte ptr 0
+		invoke crt_strtoul, addr tstr, NULL, 16
+		; теперь в eax лежит число
+		; запишем полученно число в соответствующий разряд BigNumber
+		mov ebx, [bignum_p] ; вначале получаем адрес структуры
+		mov ebx, [BigNumber ptr [ebx]].Num_p; перезаписываем содержимое ebx
+		push eax
+		mov eax, [i]
+		mov ecx, 4
+		mul ecx
+		mov edi, eax
+		pop eax
+		mov [ebx+edi], eax
+		; записали
 		inc [i]
 	.endw
 
+	mov [k], 0
+	mov edx, [rest]
+	.while [k] < edx
+		push edx
+
+		mov eax, [Str_p]
+		mov ecx, [k]
+		mov dl, byte ptr [eax+ecx]
+		mov byte ptr tstr[ecx], dl
+
+		pop edx
+		inc [k]
+	.endw
+	mov ecx, [k]
+	mov byte ptr tstr[ecx], byte ptr 0
+
+	invoke crt_strtoul, addr tstr, NULL, 16
+	mov ebx, [bignum_p] ; вначале получаем адрес структуры
+	mov ebx, [BigNumber ptr [ebx]].Num_p; перезаписываем содержимое ebx
+
+	push eax
+	mov eax, [i]
+	mov edx, 4
+	mul edx
+	pop edx
+	mov [ebx+eax], edx
+
 	mov eax, 0
-	   ret
+	ret
 bignum_set_str endp
 
-bignum_st_ui proc bignum_p: dword, number: dword
+bignum_set_ui proc bignum_p: dword, number: dword
 
-bignum_st_ui endp
+bignum_set_ui endp
 
 bignum_set_i proc bignum_p: dword, number: dword
 
@@ -228,6 +307,8 @@ main proc stdcall
 	mov [StrLen], eax
 	invoke crt_printf, $CTA0("%i\n"), [StrLen]
 	
+	invoke bignum_set_str, [BN_p], $CTA0("0xFFFFFFF0F")
+	invoke bignum_print, [BN_p]
 		
 	invoke crt_system, $CTA0("pause")
 	mov eax, 0
