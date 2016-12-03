@@ -255,16 +255,187 @@ bignum_set_str proc bignum_p: dword, str_p: dword
 bignum_set_str endp
 
 bignum_set_ui proc bignum_p: dword, number: dword
-
+	
+	invoke crt_malloc, 4
+	mov ebx, [bignum_p]
+	mov [BigNumber ptr [ebx]].Len, 1
+	mov [BigNumber ptr [ebx]].Sig, 0
+	mov [eax], [number]
+	mov [BigNumber ptr [ebx]].Num_p, eax 
+	
+	mov eax, 0
+	ret
 bignum_set_ui endp
 
 bignum_set_i proc bignum_p: dword, number: dword
-
+	invoke crt_malloc, 4
+	mov ebx, [bignum_p]
+	mov ecx, [number]
+	mov [BigNumber ptr [ebx]].Len, 1
+	.if ecx < 0
+		mov [BigNumber ptr [ebx]].Sig, 1
+		xor ecx, 80000000h
+		mov [eax], ecx
+	.else
+		mov [BigNumber ptr [ebx]].Sig, 0
+		mov [eax], ecx		
+	.endif
+	mov [BigNumber ptr [ebx]].Num_p, eax
+	
+	xor eax, eax
+	ret
 bignum_set_i endp
 
-bignum_add proc bignum_res_p: dword, bignum_1_p: dword, bignum_2_p: dword
+; складывает 2 "положительных" числа
+bignum_add_+_+ proc BN_res_p: dword, BN1_p: dword, BN2_p: dword
+	local Bigger: dword; содержит указатель на большее ЧИСЛО (массив dword)
+	local Smaller: dword; содержит указатель на меньшее ЧИСЛО (массив dword)
+	local i: dword; счетчик
+	local carry: dword; определяет, есть ли перенос
+	local rest: dword; остаток
 
+	mov eax, BN1_p
+	mov ebx, BN2_p
+	.if [BigNumber ptr [eax]].Len >= [BigNumber ptr [ebx]].Len
+		mov [Bigger], eax
+		mov [Smaller], ebx
+		push [BigNumber ptr [eax]].Len
+	.else
+		mov [Bigger], ebx
+		mov [Smaller], eax
+		push [BigNumber ptr [ebx]].Len
+	.endif
+
+	pop ecx
+	invoke crt_malloc, (ecx+1)*4
+	mov ebx, [BN_res_p]
+	mov [BigNumber [ebx]].Num_p, eax
+	; вначале складываются оба числа
+	mov [i], 0
+	mov ebx, [Smaller]
+	.while [i] < [BigNumber ptr [ebx]].Len
+		push ebx
+
+		mov ebx, [BN1_p]
+		mov ebx, [BigNumber ptr [ebx]].Num_p
+		mov ecx, [BN2_p]
+		mov ecx, [BigNumber ptr [ecx]].Num_p
+		.if [ebx + [i]*4] > INT_MAX
+			.if [ecx + [i]*4] > INT_MAX
+				mov edx, [ebx + [i]*4]
+				sub edx, INT_MAX
+				push edx
+				mov edx, [ecx + [i]*4]
+				sub edx, INT_MAX
+				pop eax
+				add edx, eax
+				mov eax, [BN_res_p]
+				mov eax, [BigNumber ptr [eax]].Num_p
+				mov [eax + [i]*4], edx
+				mov [carry], 1
+			.else
+				mov eax, [ebx + [i]*4]
+				sub eax, INT_MAX
+				add eax, [ecx + [i]*4]
+				add eax, [carry]
+
+				.if eax >= INT_MAX
+					sub eax, INT_MAX
+					sub eax, 2
+					mov edx, eax
+					mov eax, [BN_res_p]
+					mov eax, [BigNumber ptr [eax]].Num_p
+					mov [eax + [i]*4], edx
+					mov [carry], 1
+				.else
+					add eax, INT_MAX
+					mov edx, eax
+					mov eax, [BN_res_p]
+					mov eax, [BigNumber ptr [eax]].Num_p
+					mov [eax + [i]*4], edx
+					mov [carry], 0
+				.endif
+			.endif
+		.else
+
+			.if [ecx + [i]*4] > INT_MAX				
+				mov eax, [ecx + [i]*4]
+				sub eax, INT_MAX
+				add eax, [ebx + [i]*4]
+				add eax, [carry]
+				.if eax >= INT_MAX
+					sub eax, INT_MAX - 2
+					mov edx, [bignum_res_p]
+					mov edx, [BigNumber ptr [edx]].Num_p
+					mov [edx + [i]*4]], eax
+					mov [carry], 1
+				.else
+					add eax, INT_MAX
+					mov edx, eax
+					mov eax, [BN_res_p]
+					mov eax, [BigNumber ptr [eax]].Num_p
+					mov [eax + [i]*4], edx
+					mov [carry], 0					
+				.endif
+
+			.else
+				mov eax, [bignum_res_p]
+				mov eax, [BigNumber ptr [eax]].Num_p
+				mov edx, [ebx + [i]*4]
+				add edx, [ecx + [i]*4]
+				add edx, [carry]
+				mov [eax + [i]*4], edx
+				mov [carry], 0
+			.endif
+
+		.endif
+
+		pop ebx
+		inc [i]
+	.endw
+	mov ebx, [Bigger]
+	mov ecx, [BigNumber ptr [ebx]].Num_p
+	mov eax, [bignum_res_p]
+	mov eax, [BigNumber ptr [eax]].Num_p
+	.while	[i] < [BigNumber ptr [ebx]].Len
+		push ebx
+		
+		.if [ecx+[i]*4] == FFFFFFFFh
+			.if [carry] != 1
+				mov edx, [ecx + [i]*4]
+				add edx, [carry]
+				mov [eax + [i]*4], edx
+			.endif
+		.else
+			mov edx, [ecx + [i]*4]
+			add edx, [carry]
+			mov [eax + [i]*4], edx	
+		.endif
+		pop ebx
+		inc [i]
+	.endw
+	mov eax, [BN_res_p]
+	mov ebx, [BigNumber ptr [eax]].Num_p 
+	.if [carry] == 1
+		mov [ebx + [i]*4], 1
+		mov [BigNumber ptr [eax]].Len, [i]+1
+	.else
+		mov [BigNumber ptr [eax]].Len, [i]
+	.endif
+
+bignum_add_+_+ endp
+
+; вычитает из первого второе
+bignum_sub_+_+ proc bignum_res_p: dword, num_1_p: dword, sub_2_p: dword
+
+bignum_sub_+_+ endp
+
+
+bignum_add proc bignum_res_p: dword, bignum_1_p: dword, bignum_2_p: dword
+	
 bignum_add endp
+
+
 
 bignum_sub proc bignum_res_p: dword, bignum_1_p: dword, bignum_2_p: dword
 
