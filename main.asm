@@ -260,7 +260,7 @@ bignum_set_ui proc bignum_p: dword, number: dword
 	mov ebx, [bignum_p]
 	mov [BigNumber ptr [ebx]].Len, 1
 	mov [BigNumber ptr [ebx]].Sig, 0
-	mov [eax], [number]
+	mov eax, [number]
 	mov [BigNumber ptr [ebx]].Num_p, eax 
 	
 	mov eax, 0
@@ -287,16 +287,19 @@ bignum_set_i proc bignum_p: dword, number: dword
 bignum_set_i endp
 
 ; складывает 2 "положительных" числа
-bignum_add_+_+ proc BN_res_p: dword, BN1_p: dword, BN2_p: dword
+bignum_add_plus_plus proc BN_res_p: dword, BN1_p: dword, BN2_p: dword
 	local Bigger: dword; содержит указатель на большее ЧИСЛО (массив dword)
 	local Smaller: dword; содержит указатель на меньшее ЧИСЛО (массив dword)
 	local i: dword; счетчик
 	local carry: dword; определяет, есть ли перенос
 	local rest: dword; остаток
+	local temp: dword; переменная, должна перезаписываться в нужное значение перед каждым использованием
 
 	mov eax, BN1_p
 	mov ebx, BN2_p
-	.if [BigNumber ptr [eax]].Len >= [BigNumber ptr [ebx]].Len
+	mov ecx, [BigNumber ptr [eax]].Len
+	mov edx, [BigNumber ptr [ebx]].Len
+	.if ecx >= edx
 		mov [Bigger], eax
 		mov [Smaller], ebx
 		push [BigNumber ptr [eax]].Len
@@ -305,38 +308,56 @@ bignum_add_+_+ proc BN_res_p: dword, BN1_p: dword, BN2_p: dword
 		mov [Smaller], eax
 		push [BigNumber ptr [ebx]].Len
 	.endif
+	
 
-	pop ecx
-	invoke crt_malloc, (ecx+1)*4
+	pop [temp]
+	inc [temp]
+	push eax
+	mov eax, 4
+	mul [temp]
+	mov [temp], eax
+	pop eax
+
+	invoke crt_malloc, [temp]
 	mov ebx, [BN_res_p]
-	mov [BigNumber [ebx]].Num_p, eax
+	mov [BigNumber ptr [ebx]].Num_p, eax
 	; вначале складываются оба числа
 	mov [i], 0
 	mov ebx, [Smaller]
-	.while [i] < [BigNumber ptr [ebx]].Len
+	mov ecx, [BigNumber ptr [ebx]].Len
+	.while [i] < ecx
 		push ebx
+		push ecx
 
 		mov ebx, [BN1_p]
 		mov ebx, [BigNumber ptr [ebx]].Num_p
 		mov ecx, [BN2_p]
 		mov ecx, [BigNumber ptr [ecx]].Num_p
-		.if [ebx + [i]*4] > INT_MAX
-			.if [ecx + [i]*4] > INT_MAX
-				mov edx, [ebx + [i]*4]
+
+		push eax
+		mov eax, [i]
+		mov [temp], 4
+		mul [temp]
+		mov [temp], eax
+		pop eax
+
+		.if [ebx + [temp]] > INT_MAX
+			.if [ecx + [temp]] > INT_MAX
+				mov edx, [ebx + [temp]]
 				sub edx, INT_MAX
 				push edx
-				mov edx, [ecx + [i]*4]
+				mov edx, [ecx + [temp]]
 				sub edx, INT_MAX
 				pop eax
 				add edx, eax
 				mov eax, [BN_res_p]
 				mov eax, [BigNumber ptr [eax]].Num_p
-				mov [eax + [i]*4], edx
+				mov [eax + [temp]], edx
 				mov [carry], 1
 			.else
-				mov eax, [ebx + [i]*4]
+				mov eax, [ebx + [temp]]
 				sub eax, INT_MAX
-				add eax, [ecx + [i]*4]
+				add eax, [ecx + [temp]]
 				add eax, [carry]
 
 				.if eax >= INT_MAX
@@ -345,90 +366,119 @@ bignum_add_+_+ proc BN_res_p: dword, BN1_p: dword, BN2_p: dword
 					mov edx, eax
 					mov eax, [BN_res_p]
 					mov eax, [BigNumber ptr [eax]].Num_p
-					mov [eax + [i]*4], edx
+					mov [eax + [temp]], edx
 					mov [carry], 1
 				.else
 					add eax, INT_MAX
 					mov edx, eax
 					mov eax, [BN_res_p]
 					mov eax, [BigNumber ptr [eax]].Num_p
-					mov [eax + [i]*4], edx
+					mov [eax + [temp]], edx
 					mov [carry], 0
 				.endif
 			.endif
 		.else
 
-			.if [ecx + [i]*4] > INT_MAX				
-				mov eax, [ecx + [i]*4]
+			.if [ecx + [temp]] > INT_MAX				
+				mov eax, [ecx + [temp]]
 				sub eax, INT_MAX
-				add eax, [ebx + [i]*4]
+				add eax, [ebx + [temp]]
 				add eax, [carry]
 				.if eax >= INT_MAX
 					sub eax, INT_MAX - 2
-					mov edx, [bignum_res_p]
+					mov edx, [BN_res_p]
 					mov edx, [BigNumber ptr [edx]].Num_p
-					mov [edx + [i]*4]], eax
+					mov [edx + [temp]], eax
 					mov [carry], 1
 				.else
 					add eax, INT_MAX
 					mov edx, eax
 					mov eax, [BN_res_p]
 					mov eax, [BigNumber ptr [eax]].Num_p
-					mov [eax + [i]*4], edx
+					mov [eax + [temp]], edx
 					mov [carry], 0					
 				.endif
 
 			.else
-				mov eax, [bignum_res_p]
+				mov eax, [BN_res_p]
 				mov eax, [BigNumber ptr [eax]].Num_p
-				mov edx, [ebx + [i]*4]
-				add edx, [ecx + [i]*4]
+				mov edx, [ebx + [temp]]
+				add edx, [ecx + [temp]]
 				add edx, [carry]
-				mov [eax + [i]*4], edx
+				mov [eax + [temp]], edx
 				mov [carry], 0
 			.endif
 
 		.endif
 
+		pop ecx
 		pop ebx
 		inc [i]
 	.endw
+
+
 	mov ebx, [Bigger]
 	mov ecx, [BigNumber ptr [ebx]].Num_p
-	mov eax, [bignum_res_p]
+	mov eax, [BN_res_p]
 	mov eax, [BigNumber ptr [eax]].Num_p
-	.while	[i] < [BigNumber ptr [ebx]].Len
-		push ebx
+
+	push ecx
+	mov ecx, [BigNumber ptr [ebx]].Len
+	.while	[i] < ecx
+		pop ecx
+
+		push eax
+		mov eax, [i]
+		mov [temp], 4
+		mul [temp]
+		mov [temp], eax
+		pop eax
+
 		
-		.if [ecx+[i]*4] == FFFFFFFFh
+		.if [ecx+[temp]] == INT_MAX
 			.if [carry] != 1
-				mov edx, [ecx + [i]*4]
+				mov edx, [ecx + [temp]]
 				add edx, [carry]
-				mov [eax + [i]*4], edx
+				mov [eax + [temp]], edx
 			.endif
 		.else
-			mov edx, [ecx + [i]*4]
+			mov edx, [ecx + [temp]]
 			add edx, [carry]
-			mov [eax + [i]*4], edx	
+			mov [eax + [temp]], edx	
 		.endif
-		pop ebx
 		inc [i]
+
+		push ecx
+		mov ecx, [BigNumber ptr [ebx]].Len
 	.endw
 	mov eax, [BN_res_p]
 	mov ebx, [BigNumber ptr [eax]].Num_p 
-	.if [carry] == 1
-		mov [ebx + [i]*4], 1
-		mov [BigNumber ptr [eax]].Len, [i]+1
-	.else
-		mov [BigNumber ptr [eax]].Len, [i]
-	.endif
 
-bignum_add_+_+ endp
+	push eax
+	mov eax, [i]
+	mov [temp], 4
+	mul [temp]
+	mov [temp], eax
+	pop eax
+
+	.if [carry] == 1
+		mov [ebx + [temp]], 1
+		mov esi, [i]
+		inc esi
+		mov [BigNumber ptr [eax]].Len, esi
+	.else
+		mov esi, [i]
+		mov [BigNumber ptr [eax]].Len, esi
+	.endif
+	
+	xor eax, eax
+	ret
+bignum_add_plus_plus endp
 
 ; вычитает из первого второе
-bignum_sub_+_+ proc bignum_res_p: dword, num_1_p: dword, sub_2_p: dword
+bignum_sub_plus_plus proc bignum_res_p: dword, num_1_p: dword, sub_2_p: dword
 
-bignum_sub_+_+ endp
+bignum_sub_plus_plus endp
 
 
 bignum_add proc bignum_res_p: dword, bignum_1_p: dword, bignum_2_p: dword
