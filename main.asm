@@ -64,6 +64,7 @@ bignum_print endp
 
 bignum_init_null proc uses edx ebx edi bignum_p: dword, len: dword
 	local i:dword
+
 	mov [i], 0
 	mov eax, [len]
 	mov edx, 4
@@ -295,6 +296,10 @@ bignum_add_plus_plus proc BN_res_p: dword, BN1_p: dword, BN2_p: dword
 	local rest: dword; остаток
 	local temp: dword; переменная, должна перезаписываться в нужное значение перед каждым использованием
 
+	mov [temp], 0
+	mov [rest], 0
+	mov [carry], 0
+
 	mov eax, BN1_p
 	mov ebx, BN2_p
 	mov ecx, [BigNumber ptr [eax]].Len
@@ -320,7 +325,22 @@ bignum_add_plus_plus proc BN_res_p: dword, BN1_p: dword, BN2_p: dword
 
 	invoke crt_malloc, [temp]
 	mov ebx, [BN_res_p]
+
 	mov [BigNumber ptr [ebx]].Num_p, eax
+
+	mov ebx, [BigNumber ptr [ebx]].Num_p
+	mov [i], 0
+	mov cl, 0
+	mov edi, [temp]
+	;mov [k], 4 ; множитель
+	.while [i] < edi
+		mov eax, [i]
+		mov  byte ptr [ebx+eax], byte ptr cl
+		inc [i]
+	.endw
+	; заполнили 0 разряды!
+
+
 	; вначале складываются оба числа
 	mov [i], 0
 	mov ebx, [Smaller]
@@ -340,24 +360,37 @@ bignum_add_plus_plus proc BN_res_p: dword, BN1_p: dword, BN2_p: dword
 		mul [temp]
 		mov [temp], eax
 		pop eax
+		
+		mov esi, [temp]
+		mov edi, [ebx+esi]
+		 
+		.if edi > INT_MAX
+			mov esi, [temp]
+			mov edi, [ecx+esi]
 
-		.if [ebx + [temp]] > INT_MAX
-			.if [ecx + [temp]] > INT_MAX
-				mov edx, [ebx + [temp]]
+			.if edi > INT_MAX
+
+				mov edx, [ebx + esi]
 				sub edx, INT_MAX
 				push edx
-				mov edx, [ecx + [temp]]
+
+				mov edx, [ecx + esi]
 				sub edx, INT_MAX
 				pop eax
 				add edx, eax
+
+				add edx, [carry]
+				sub edx, 2
+
 				mov eax, [BN_res_p]
 				mov eax, [BigNumber ptr [eax]].Num_p
-				mov [eax + [temp]], edx
+
+				mov [eax + esi], edx
 				mov [carry], 1
 			.else
-				mov eax, [ebx + [temp]]
+				mov eax, [ebx + esi]
 				sub eax, INT_MAX
-				add eax, [ecx + [temp]]
+				add eax, [ecx + esi]
 				add eax, [carry]
 
 				.if eax >= INT_MAX
@@ -366,46 +399,50 @@ bignum_add_plus_plus proc BN_res_p: dword, BN1_p: dword, BN2_p: dword
 					mov edx, eax
 					mov eax, [BN_res_p]
 					mov eax, [BigNumber ptr [eax]].Num_p
-					mov [eax + [temp]], edx
+					mov [eax + esi], edx
 					mov [carry], 1
 				.else
 					add eax, INT_MAX
 					mov edx, eax
 					mov eax, [BN_res_p]
 					mov eax, [BigNumber ptr [eax]].Num_p
-					mov [eax + [temp]], edx
+					mov [eax + esi], edx
 					mov [carry], 0
 				.endif
 			.endif
 		.else
 
-			.if [ecx + [temp]] > INT_MAX				
-				mov eax, [ecx + [temp]]
+			mov esi, [temp]
+			mov edi, [ecx+esi]
+
+			.if edi > INT_MAX				
+				mov eax, [ecx + esi]
 				sub eax, INT_MAX
-				add eax, [ebx + [temp]]
+				add eax, [ebx + esi]
 				add eax, [carry]
 				.if eax >= INT_MAX
-					sub eax, INT_MAX - 2
+					sub eax, INT_MAX
+					sub eax, 2
 					mov edx, [BN_res_p]
 					mov edx, [BigNumber ptr [edx]].Num_p
-					mov [edx + [temp]], eax
+					mov [edx + esi], eax
 					mov [carry], 1
 				.else
 					add eax, INT_MAX
 					mov edx, eax
 					mov eax, [BN_res_p]
 					mov eax, [BigNumber ptr [eax]].Num_p
-					mov [eax + [temp]], edx
+					mov [eax + esi], edx
 					mov [carry], 0					
 				.endif
 
 			.else
 				mov eax, [BN_res_p]
 				mov eax, [BigNumber ptr [eax]].Num_p
-				mov edx, [ebx + [temp]]
-				add edx, [ecx + [temp]]
+				mov edx, [ebx + esi]
+				add edx, [ecx + esi]
 				add edx, [carry]
-				mov [eax + [temp]], edx
+				mov [eax + esi], edx
 				mov [carry], 0
 			.endif
 
@@ -434,17 +471,21 @@ bignum_add_plus_plus proc BN_res_p: dword, BN1_p: dword, BN2_p: dword
 		mov [temp], eax
 		pop eax
 
+		mov esi, [temp]
+		mov edi, [ecx+esi]
 		
-		.if [ecx+[temp]] == INT_MAX
+		.if edi == UINT_MAX
 			.if [carry] != 1
-				mov edx, [ecx + [temp]]
+				mov edx, [ecx + esi]
 				add edx, [carry]
-				mov [eax + [temp]], edx
+				mov [eax + esi], edx
+				mov [carry], 0
 			.endif
 		.else
-			mov edx, [ecx + [temp]]
+			mov edx, [ecx + esi]
 			add edx, [carry]
-			mov [eax + [temp]], edx	
+			mov [eax + esi], edx	
+			mov [carry], 0
 		.endif
 		inc [i]
 
@@ -461,8 +502,12 @@ bignum_add_plus_plus proc BN_res_p: dword, BN1_p: dword, BN2_p: dword
 	mov [temp], eax
 	pop eax
 
+	mov esi, [temp]
+	mov edi, [ebx+esi]
+
+
 	.if [carry] == 1
-		mov [ebx + [temp]], 1
+		mov [ebx + esi], dword ptr 1
 		mov esi, [i]
 		inc esi
 		mov [BigNumber ptr [eax]].Len, esi
@@ -513,12 +558,22 @@ bignum_mul_ui endp
 main proc stdcall
 	local StrLen: dword
 	local Str_1: dword
-	local BN_p: dword
+	local BN1_p: dword
+	local BN2_p: dword
+	local BN3_p: dword
+	
 	invoke crt_malloc, sizeof(BigNumber)
-	mov [BN_p], eax
-	invoke bignum_init_null, [BN_p], 50
-	mov eax, [BN_p]
-	invoke crt_printf, $CTA0("%i\n"), [BigNumber ptr [eax]].Len
+	mov [BN1_p], eax
+	invoke bignum_init_null, [BN1_p], 50
+	
+	invoke crt_malloc, sizeof(BigNumber)
+	mov [BN2_p], eax
+	invoke bignum_init_null, [BN2_p], 50
+
+	invoke crt_malloc, sizeof(BigNumber)
+	mov [BN3_p], eax
+	invoke bignum_init_null, [BN3_p], 50
+
 	
 	invoke crt_malloc, 12
 	mov [Str_1], eax
@@ -528,8 +583,16 @@ main proc stdcall
 	mov [StrLen], eax
 	invoke crt_printf, $CTA0("%i\n"), [StrLen]
 	
-	invoke bignum_set_str, [BN_p], $CTA0("0xFFFFFFF0F")
-	invoke bignum_print, [BN_p]
+
+	invoke bignum_set_str, [BN1_p], $CTA0("0xFFFFFFFF")
+	invoke bignum_set_str, [BN2_p], $CTA0("0x1FFFFFFFFFFFFFF")
+	invoke bignum_set_str, [BN3_p], $CTA0("0X0")
+
+	invoke bignum_add_plus_plus, [BN3_p], [BN1_p], [BN2_p]
+
+	invoke bignum_print, [BN1_p]
+	invoke bignum_print, [BN2_p]
+	invoke bignum_print, [BN3_p]
 		
 	invoke crt_system, $CTA0("pause")
 	mov eax, 0
