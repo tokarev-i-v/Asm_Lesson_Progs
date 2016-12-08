@@ -520,9 +520,140 @@ bignum_add_plus_plus proc BN_res_p: dword, BN1_p: dword, BN2_p: dword
 	ret
 bignum_add_plus_plus endp
 
-; вычитает из первого второе
-bignum_sub_plus_plus proc bignum_res_p: dword, num_1_p: dword, sub_2_p: dword
+; функция возвращает индекс первого НЕНУЛЕВОГО разряда, следующего за данным
+; Такой должен существовать, если это не конец
+find_first_not_null_index proc uses ebx ecx edx edi BN_p:dword, cur_index:dword
+	local j:dword
 
+	mov eax, [cur_index]
+	mov [j], eax
+	inc [j]
+
+	mov eax, [BN_p]
+	mov edi, [BigNumber ptr [eax]].Len
+	mov ebx, [BigNumber ptr [eax]].Num_p
+	.while [j] < edi
+		mov ecx, [j]
+		mov edx, [ebx+ebx*4]
+		.if [j] != 0
+			mov eax, [j]
+			ret
+		.endif
+	.endw
+	
+	; если больше нет ненулевого разряда
+	mov eax, 0
+	ret
+find_first_not_null_index endp
+
+; устанавливает максимальные значения в разряды с i по j
+; ОБЕ ГРАНИЦЫ ВКЛЮЧИТЕЛЬНО
+; функция сохраняет состояния регистров!
+set_max_num_to_nulls_from_i_to_j proc uses eax ebx ecx edx edi BN_p:dword, i_ind:dword, j_ind:dword
+	local i:dword
+	local j:dword
+	
+	mov eax, [i_ind]
+	mov [i], eax
+	mov eax, [j_ind]
+	mov ebx, [BN_p]
+	mov ebx, [BigNumber ptr [ebx]].Num_p
+	.while [i] <= eax
+		mov ecx, [i]
+		mov edx, UINT_MAX
+		mov [ebx+ecx*4], edx
+	.endw 
+
+	ret
+set_max_num_to_nulls_from_i_to_j endp
+; BN1 - BN2
+; BN1 >= BN2!!!
+bignum_sub_plus_plus proc BN_res_p: dword, BN1_p: dword, BN2_p: dword
+	local loan: dword
+	local tlen: dword 
+	local temp: dword
+	local i: dword
+	; это копия числа BN_2_p.Num_p, в которой мы будем делать изменения и из которой будем вычитать все.
+	; Затем этот указатель будет положен в BN_res_p.Num_p
+	local temp_BN1_N_p: dword
+
+	mov [loan], 0
+	mov [tlen], 0
+	mov [temp], 0
+
+	mov eax, [BN_res_p]
+	invoke crt_free, [BigNumber ptr [eax]].Num_p
+
+
+	; выделяем память
+	mov eax, [BN1_p]
+	mov eax, [BigNumber ptr [eax]].Len
+	mov ecx, 4
+	mul ecx
+
+	invoke crt_malloc, eax
+	mov ebx, [BN_res_p]
+	mov [BigNumber ptr [ebx]].Num_p, eax
+	; копируем число
+	mov ebx, eax
+	mov eax, [BN1_p]
+	mov edi, [BigNumber ptr [eax]].Len
+	mov eax, [BigNumber ptr [eax]].Num_p
+
+	.while [i] < edi
+		mov ecx, [i]
+		mov edx, [eax+ecx*4]
+		mov [ebx+ecx*4], edx
+		inc [i]		
+	.endw
+	; скопировали число
+
+	mov eax, [BN2_p]
+	mov edi, [BigNumber ptr [BN2_p]].Len
+	mov eax, [BigNumber ptr [eax]].Num_p
+	mov ebx, [BN_res_p]
+	mov ebx, [BigNumber ptr [ebx]].Num_p
+	mov [i], 0
+	; вычитание разрядов
+	; пока не кончится меньшее число
+	; в EAX хранится указатель на МЕНЬШЕЕ число
+	; в EBX хранится указатель на БОЛЬШЕЕ число
+	.while [i] < edi
+
+		mov ecx, [i]
+		mov edx, [eax+ecx*4]
+		; сравниваем числа
+		.if [ebx+ecx*4] >= edx
+			sub [ebx+ecx*4], edx
+		.else
+		; вот тут шляпа	
+			invoke find_first_not_null_index, [BN_res_p], [i]
+			; сначала ищем ненулевой разряд для заема
+			mov [temp], eax
+			; если ненулевой разряд нашелся
+			.if [temp] != 0
+			; записываем 
+				inc [i]
+				dec [temp]
+				invoke set_max_num_to_nulls_from_i_to_j, [BN_res_p], [i], [temp]
+				dec [i]
+				inc [temp]
+				; теперь занимаем из меньшего (но >i) ненулевого разряда
+				mov esi, [temp]
+				sub [ebx+esi*4], dword ptr 1
+				; теперь делаем шоколадно
+				mov esi, UINT_MAX
+				sub esi, [eax+ecx*4]
+				add [ebx+ecx*4], esi
+			.endif
+
+		.endif
+	.endw
+	;ТЕПЕРЬ СДЕЛАТЬ ПРОВЕРКУ НА 0 СТАРШИЕ РАЗРЯДЫ И СТЕРЕТЬ ИХ, ПЕРЕЗАПИСАВ ЧИСЛО В НОВОЕ!;
+
+
+	xor eax, eax
+	ret
 bignum_sub_plus_plus endp
 
 
