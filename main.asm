@@ -522,7 +522,7 @@ bignum_add_plus_plus endp
 
 ; функция возвращает индекс первого НЕНУЛЕВОГО разряда, следующего за данным
 ; Такой должен существовать, если это не конец
-find_first_not_null_index proc uses ebx ecx edx edi BN_p:dword, cur_index:dword
+find_first_not_null_index proc uses ebx ecx edx esi edi BN_p:dword, cur_index:dword
 	local j:dword
 
 	mov eax, [cur_index]
@@ -534,7 +534,7 @@ find_first_not_null_index proc uses ebx ecx edx edi BN_p:dword, cur_index:dword
 	mov ebx, [BigNumber ptr [eax]].Num_p
 	.while [j] < edi
 		mov ecx, [j]
-		mov edx, [ebx+ebx*4]
+		mov edx, [ebx+ecx*4]
 		.if [j] != 0
 			mov eax, [j]
 			ret
@@ -558,10 +558,13 @@ set_max_num_to_nulls_from_i_to_j proc uses eax ebx ecx edx edi BN_p:dword, i_ind
 	mov eax, [j_ind]
 	mov ebx, [BN_p]
 	mov ebx, [BigNumber ptr [ebx]].Num_p
-	.while [i] <= eax
+
+	.while [i] < eax
 		mov ecx, [i]
 		mov edx, UINT_MAX
 		mov [ebx+ecx*4], edx
+
+		inc [i]
 	.endw 
 
 	ret
@@ -609,7 +612,7 @@ bignum_sub_plus_plus proc BN_res_p: dword, BN1_p: dword, BN2_p: dword
 	; скопировали число
 
 	mov eax, [BN2_p]
-	mov edi, [BigNumber ptr [BN2_p]].Len
+	mov edi, [BigNumber ptr [eax]].Len
 	mov eax, [BigNumber ptr [eax]].Num_p
 	mov ebx, [BN_res_p]
 	mov ebx, [BigNumber ptr [ebx]].Num_p
@@ -619,38 +622,73 @@ bignum_sub_plus_plus proc BN_res_p: dword, BN1_p: dword, BN2_p: dword
 	; в EAX хранится указатель на МЕНЬШЕЕ число
 	; в EBX хранится указатель на БОЛЬШЕЕ число
 	.while [i] < edi
-
 		mov ecx, [i]
+
 		mov edx, [eax+ecx*4]
 		; сравниваем числа
 		.if [ebx+ecx*4] >= edx
 			sub [ebx+ecx*4], edx
 		.else
 		; вот тут шляпа	
-			invoke find_first_not_null_index, [BN_res_p], [i]
+			push eax
+			invoke find_first_not_null_index, [BN1_p], [i]
 			; сначала ищем ненулевой разряд для заема
 			mov [temp], eax
+			pop eax
 			; если ненулевой разряд нашелся
 			.if [temp] != 0
 			; записываем 
 				inc [i]
-				dec [temp]
 				invoke set_max_num_to_nulls_from_i_to_j, [BN_res_p], [i], [temp]
 				dec [i]
-				inc [temp]
 				; теперь занимаем из меньшего (но >i) ненулевого разряда
 				mov esi, [temp]
 				sub [ebx+esi*4], dword ptr 1
 				; теперь делаем шоколадно
 				mov esi, UINT_MAX
 				sub esi, [eax+ecx*4]
+				inc esi
 				add [ebx+ecx*4], esi
 			.endif
 
 		.endif
+		inc [i]
 	.endw
 	;ТЕПЕРЬ СДЕЛАТЬ ПРОВЕРКУ НА 0 СТАРШИЕ РАЗРЯДЫ И СТЕРЕТЬ ИХ, ПЕРЕЗАПИСАВ ЧИСЛО В НОВОЕ!;
+	
+	mov eax, [BN_res_p]
+	mov ecx, [BigNumber ptr [eax]].Len
+	dec ecx
+	mov ebx, [BigNumber ptr [eax]].Num_p
+	
+	mov edi, [ebx+ecx*4]
+	.while edi == 0
+		.if ecx == 0
+			.break
+		.endif
+		dec ecx
+		mov edi, [ebx+ecx*4]
+	.endw
 
+	inc ecx
+	mov eax, 4
+	mul ecx
+	push ecx
+	invoke crt_malloc, eax
+	mov ebx, [BN_res_p]
+	mov ebx, [BigNumber ptr [ebx]].Num_p
+	pop ecx
+	mov [i], 0
+	.while [i] < ecx
+		mov edx, [i]
+		mov edi, [ebx+edx*4]
+		mov [eax+edx*4], edi
+		inc [i]
+	.endw
+	
+	mov ebx, [BN_res_p]
+	mov [BigNumber ptr [ebx]].Num_p, eax
+	mov [BigNumber ptr [ebx]].Len, ecx
 
 	xor eax, eax
 	ret
@@ -716,10 +754,12 @@ main proc stdcall
 	
 
 	invoke bignum_set_str, [BN1_p], $CTA0("0xFFFFFFFF")
-	invoke bignum_set_str, [BN2_p], $CTA0("0x1FFFFFFFFFFFFFF")
+	invoke bignum_set_str, [BN2_p], $CTA0("0xFFFFFFFF")
 	invoke bignum_set_str, [BN3_p], $CTA0("0X0")
 
 	invoke bignum_add_plus_plus, [BN3_p], [BN1_p], [BN2_p]
+	invoke bignum_add_plus_plus, [BN1_p], [BN3_p], [BN2_p]
+	invoke bignum_sub_plus_plus, [BN3_p], [BN1_p], [BN2_p]
 
 	invoke bignum_print, [BN1_p]
 	invoke bignum_print, [BN2_p]
