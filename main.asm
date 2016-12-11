@@ -288,7 +288,7 @@ bignum_set_i proc bignum_p: dword, number: dword
 bignum_set_i endp
 
 ; складывает 2 "положительных" числа
-bignum_add_plus_plus proc BN_res_p: dword, BN1_p: dword, BN2_p: dword
+bignum_add_plus_plus proc uses eax ebx ecx edx edi esi BN_res_p: dword, BN1_p: dword, BN2_p: dword
 	local Bigger: dword; содержит указатель на большее ЧИСЛО (массив dword)
 	local Smaller: dword; содержит указатель на меньшее ЧИСЛО (массив dword)
 	local i: dword; счетчик
@@ -549,7 +549,7 @@ find_first_not_null_index endp
 ; устанавливает максимальные значения в разряды с i по j
 ; ОБЕ ГРАНИЦЫ ВКЛЮЧИТЕЛЬНО
 ; функция сохраняет состояния регистров!
-set_max_num_to_nulls_from_i_to_j proc uses eax ebx ecx edx edi BN_p:dword, i_ind:dword, j_ind:dword
+set_max_num_to_nulls_from_i_to_j proc uses eax ebx ecx edx edi esi BN_p:dword, i_ind:dword, j_ind:dword
 	local i:dword
 	local j:dword
 	
@@ -571,7 +571,7 @@ set_max_num_to_nulls_from_i_to_j proc uses eax ebx ecx edx edi BN_p:dword, i_ind
 set_max_num_to_nulls_from_i_to_j endp
 ; BN1 - BN2
 ; BN1 >= BN2!!!
-bignum_sub_plus_plus proc BN_res_p: dword, BN1_p: dword, BN2_p: dword
+bignum_sub_plus_plus proc uses eax ebx ecx edx edi esi BN_res_p: dword, BN1_p: dword, BN2_p: dword
 	local loan: dword
 	local tlen: dword 
 	local temp: dword
@@ -694,30 +694,195 @@ bignum_sub_plus_plus proc BN_res_p: dword, BN1_p: dword, BN2_p: dword
 	ret
 bignum_sub_plus_plus endp
 
+;
+bignum_add proc uses eax ebx ecx edx edi esi BN_res_p: dword, BN1_p: dword, BN2_p: dword
 
-bignum_add proc bignum_res_p: dword, bignum_1_p: dword, bignum_2_p: dword
-	
+	mov eax, [BN1_p]
+	mov ebx, [BN2_p]
+	mov edx, [BN_res_p]
+
+	;если первое число положительное
+	.if [BigNumber ptr [eax]].Sig == 0
+		.if [BigNumber ptr [ebx]].Sig == 0
+			push edx
+			invoke bignum_add_plus_plus, [BN_res_p], [BN1_p], [BN2_p]
+			pop edx
+			mov [BigNumber ptr [edx]].Sig, 0
+		.else
+			; Первое число '+', второе '-'
+			mov ecx, [BigNumber ptr [eax]].Len
+			; Если первое число >= второго
+			.if ecx >= [BigNumber ptr [ebx]].Len
+				push edx
+				invoke bignum_sub_plus_plus, [BN_res_p], [BN1_p], [BN2_p]
+				pop edx
+				mov [BigNumber ptr [edx]].Sig, 0
+			.else
+				push edx
+				invoke bignum_sub_plus_plus, [BN_res_p], [BN2_p], [BN1_p]
+				pop edx
+				mov [BigNumber ptr [edx]].Sig, 1
+			.endif
+		.endif
+	.else
+		.if [BigNumber ptr[ebx]].Sig == 0
+			; Первое число '-', второе '+'
+			mov ecx, [BigNumber ptr [eax]].Len
+			; Если первое число < второго
+			.if ecx < [BigNumber ptr [ebx]].Len
+				push edx
+				invoke bignum_sub_plus_plus, [BN_res_p], [BN2_p], [BN1_p]
+				pop edx
+				mov [BigNumber ptr [edx]].Sig, 0
+			.else
+				push edx
+				invoke bignum_sub_plus_plus, [BN_res_p], [BN1_p], [BN2_p]
+				pop edx
+				mov [BigNumber ptr [edx]].Sig, 1
+			.endif		
+		.else
+			; если оба числа отрицательные 
+			push edx
+			invoke bignum_add_plus_plus, [BN_res_p], [BN1_p], [BN2_p]
+			pop edx
+			mov [BigNumber ptr [edx]].Sig, 1
+		.endif
+	.endif
+
 bignum_add endp
 
 
-
-bignum_sub proc bignum_res_p: dword, bignum_1_p: dword, bignum_2_p: dword
+bignum_sub proc uses eax ebx ecx edx esi edi BN_res_p: dword, BN1_p: dword, BN2_p: dword
+	
+	mov eax, [BN1_p]
+	mov ebx, [BN2_p]
+	mov edx, [BN_res_p]
+	;если BN1_p '+'
+	.if [BigNumber ptr [eax]].Sig == 0
+		.if [BigNumber ptr [ebx]].Sig == 0
+		; если BN1_p '+', BN2_p '+'
+			mov ecx, [BigNumber ptr [eax]].Len
+			.if ecx >= [BigNumber ptr [ebx]].Len
+			; Если первое BN1_p >= BN2_p
+				push edx
+				invoke bignum_sub_plus_plus, [BN_res_p], [BN1_p], [BN2_p]
+				pop edx
+				mov [BigNumber ptr [edx]].Sig, 0
+			.else
+				push edx
+				invoke bignum_sub_plus_plus, [BN_res_p], [BN2_p], [BN1_p]
+				pop edx
+				mov [BigNumber ptr [edx]].Sig, 1
+			.endif
+		.else
+			; Первое BN1_p '+', BN2_p '-'
+			; тогда просто складываем 2 числа '+' - '-' = '+' + '+'
+			push edx
+			invoke bignum_add_plus_plus, [BN_res_p], [BN2_p], [BN1_p]
+			pop edx
+			mov [BigNumber ptr [edx]].Sig, 0			
+		.endif
+	.else
+		.if [BigNumber ptr[ebx]].Sig == 0
+			; Первое число '-', второе '+' = - '+' - '+'
+			; тогда складываем 2 числа 
+			push edx
+			invoke bignum_add_plus_plus, [BN_res_p], [BN1_p], [BN2_p]
+			pop edx
+			mov [BigNumber ptr [edx]].Sig, 1
+		.else
+			; если BN1_p '-', BN2_p '-' = '-' + '+'
+			mov ecx, [BigNumber ptr [eax]].Len
+			; Если BN1_p < BN2_p
+			.if ecx < [BigNumber ptr [ebx]].Len
+				push edx
+				invoke bignum_sub_plus_plus, [BN_res_p], [BN2_p], [BN1_p]
+				pop edx
+				mov [BigNumber ptr [edx]].Sig, 0
+			.else
+				push edx
+				invoke bignum_sub_plus_plus, [BN_res_p], [BN1_p], [BN2_p]
+				pop edx
+				mov [BigNumber ptr [edx]].Sig, 1
+			.endif		
+			
+		.endif
+	.endif
 
 bignum_sub endp
 
-bignum_xor proc bignum_res_p: dword, bignum_1_p: dword, bignum_2_p: dword
 
+bignum_xor proc uses eax ebx ecx edx edi esi BN_res_p: dword, BN1_p: dword, BN2_p: dword
+	local i:dword
+
+	mov eax, [BN1_p]
+	mov ebx, [BN2_p]
+	mov edx, [BN_res_p]
+	mov edx, [BigNumber ptr [edx]].Num_p
+	
+	.if ecx < [BigNumber ptr [ebx]].Len
+		mov eax, [BN1_p]
+		mov ebx, [BN2_p]
+		mov ecx, [BigNumber ptr [eax]].Len
+	.else
+		mov eax, [BN2_p]
+		mov ebx, [BN1_p]
+		mov ecx, [BigNumber ptr [eax]].Len
+	.endif
+
+	mov [i], 0
+	.while [i] < ecx 
+		push eax
+		push ebx
+		push ecx
+		
+		mov eax, [BigNumber ptr [eax]].Num_p
+		mov ebx, [BigNumber ptr [ebx]].Num_p
+		mov ecx, [i]
+
+		mov eax, [eax+ecx*4]
+		mov ebx, [ebx+ecx*4]
+
+		xor eax, ebx
+		mov [edx+ecx*4], eax
+
+		pop ecx
+		pop ebx
+		pop eax
+		inc [i]
+	.endw
+
+	mov ecx, [BigNumber ptr [ebx]].Len
+	.while [i] < ecx
+		push eax
+		push ebx
+		push ecx
+		
+		mov eax, [BigNumber ptr [eax]].Num_p
+		mov ebx, [BigNumber ptr [ebx]].Num_p
+		mov ecx, [i]
+
+		mov eax, [ebx+ecx*4]
+		mov [edx+ecx*4], eax
+
+		pop ecx
+		pop ebx
+		pop eax
+		inc [i]		
+	.endw
+
+	ret
 bignum_xor endp
 
-bignum_or proc bignum_res_p: dword, bignum_1_p: dword, bignum_2_p: dword
+bignum_or proc uses eax ebx ecx edx edi esi BN_res_p: dword, BN1_p: dword, BN2_p: dword
 
 bignum_or endp
 
-bignum_and proc bignum_res_p: dword, bignum_1_p: dword, bignum_2_p: dword
+bignum_and proc uses eax ebx ecx edx edi esi BN_res_p: dword, BN1_p: dword, BN2_p: dword
 
 bignum_and endp
 
-bignum_mul_ui proc bignum_res_p: dword, bignum_1_p: dword, bignum_2_p: dword
+bignum_mul_ui proc  uses eax ebx ecx edx edi esi BN_res_p: dword, BN1_p: dword, BN2_p: dword
 
 bignum_mul_ui endp
 
@@ -755,11 +920,11 @@ main proc stdcall
 
 	invoke bignum_set_str, [BN1_p], $CTA0("0xFFFFFFFF")
 	invoke bignum_set_str, [BN2_p], $CTA0("0xFFFFFFFF")
-	invoke bignum_set_str, [BN3_p], $CTA0("0X0")
+	invoke bignum_set_str, [BN3_p], $CTA0("0x0")
 
-	invoke bignum_add_plus_plus, [BN3_p], [BN1_p], [BN2_p]
-	invoke bignum_add_plus_plus, [BN1_p], [BN3_p], [BN2_p]
-	invoke bignum_sub_plus_plus, [BN3_p], [BN1_p], [BN2_p]
+	invoke bignum_add, [BN3_p], [BN1_p], [BN2_p]
+	invoke bignum_add, [BN1_p], [BN3_p], [BN2_p]
+;	invoke bignum_sub, [BN3_p], [BN1_p], [BN2_p]
 
 	invoke bignum_print, [BN1_p]
 	invoke bignum_print, [BN2_p]
