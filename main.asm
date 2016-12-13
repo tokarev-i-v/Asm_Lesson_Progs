@@ -36,15 +36,24 @@ bignum_print proc uses ebx edx ecx edi esi bignum_p: dword
 	dec ecx
 	mov [i], ecx
 
-	.if [BigNumber ptr [ebx]].Sig == 1
-		invoke crt_printf, $CTA0("-")
-	.endif
+
 	.if [i] == 0
 		mov ecx, [BigNumber ptr [ebx]].Num_p
 		mov ecx, [ecx]
+		push ecx
+		.if ecx != 0
+			.if [BigNumber ptr [ebx]].Sig == 1
+				invoke crt_printf, $CTA0("-")
+			.endif
+		.endif
+		pop ecx
 		invoke crt_printf, $CTA0("%08X \n"), ecx
 		mov eax, 0
 		ret
+	.endif
+
+	.if [BigNumber ptr [ebx]].Sig == 1
+		invoke crt_printf, $CTA0("-")
 	.endif
 	
 	.while 1
@@ -577,16 +586,13 @@ set_max_num_to_nulls_from_i_to_j endp
 bignum_sub_plus_plus proc uses eax ebx ecx edx edi esi BN_res_p: dword, BN1_p: dword, BN2_p: dword
 	; сслываетс€ на большее число;
 	; в конце, будет братьс€ знак отсюда;
-	local whats_bigger:byte
 	local i: dword
 	; это копи€ числа BN_2_p.Num_p, в которой мы будем делать изменени€ и из которой будем вычитать все.
 	; «атем этот указатель будет положен в BN_res_p.Num_p
 	local temp_BN1_N_p: dword
+	local temp: dword
 
-	mov [loan], 0
-	mov [tlen], 0
 	mov [temp], 0
-
 	mov eax, [BN_res_p]
 	invoke crt_free, [BigNumber ptr [eax]].Num_p
 
@@ -716,11 +722,33 @@ bignum_add proc uses eax ebx ecx edx edi esi BN_res_p: dword, BN1_p: dword, BN2_
 			; ѕервое число '+', второе '-'
 			mov ecx, [BigNumber ptr [eax]].Len
 			; ≈сли первое число >= второго
-			.if ecx >= [BigNumber ptr [ebx]].Len
+			.if ecx > [BigNumber ptr [ebx]].Len
 				push edx
 				invoke bignum_sub_plus_plus, [BN_res_p], [BN1_p], [BN2_p]
 				pop edx
 				mov [BigNumber ptr [edx]].Sig, 0
+
+			.elseif ecx == [BigNumber ptr [ebx]].Len
+			; Ќужно добавить еще сравнение бќльших разр€дов при равенстве чисел!
+				push edx
+				mov eax, [BigNumber ptr [eax]].Num_p
+				mov edx, [BigNumber ptr [ebx]].Len
+				mov ebx, [BigNumber ptr [ebx]].Num_p
+
+				dec ecx
+				dec edx
+				mov esi, [eax+ecx*4]
+				mov edi, [ebx+edx*4]
+
+				.if esi >= edi
+					invoke bignum_sub_plus_plus, [BN_res_p], [BN1_p], [BN2_p]
+					pop edx
+					mov [BigNumber ptr [edx]].Sig, 0						
+				.else 
+					invoke bignum_sub_plus_plus, [BN_res_p], [BN2_p], [BN1_p]
+					pop edx
+					mov [BigNumber ptr [edx]].Sig, 1					
+				.endif
 			.else
 				push edx
 				invoke bignum_sub_plus_plus, [BN_res_p], [BN2_p], [BN1_p]
@@ -738,6 +766,27 @@ bignum_add proc uses eax ebx ecx edx edi esi BN_res_p: dword, BN1_p: dword, BN2_
 				invoke bignum_sub_plus_plus, [BN_res_p], [BN2_p], [BN1_p]
 				pop edx
 				mov [BigNumber ptr [edx]].Sig, 0
+			.elseif ecx == [BigNumber ptr [ebx]].Len
+			; Ќужно добавить еще сравнение бќльших разр€дов при равенстве чисел!
+				push edx
+				mov eax, [BigNumber ptr [eax]].Num_p
+				mov edx, [BigNumber ptr [ebx]].Len
+				mov ebx, [BigNumber ptr [ebx]].Num_p
+
+				dec ecx
+				dec edx
+				mov esi, [eax+ecx*4]
+				mov edi, [ebx+edx*4]
+
+				.if esi >= edi
+					invoke bignum_sub_plus_plus, [BN_res_p], [BN1_p], [BN2_p]
+					pop edx
+					mov [BigNumber ptr [edx]].Sig, 1						
+				.else 
+					invoke bignum_sub_plus_plus, [BN_res_p], [BN2_p], [BN1_p]
+					pop edx
+					mov [BigNumber ptr [edx]].Sig, 0					
+				.endif
 			.else
 				push edx
 				invoke bignum_sub_plus_plus, [BN_res_p], [BN1_p], [BN2_p]
@@ -767,12 +816,34 @@ bignum_sub proc uses eax ebx ecx edx esi edi BN_res_p: dword, BN1_p: dword, BN2_
 		.if [BigNumber ptr [ebx]].Sig == 0
 		; если BN1_p '+', BN2_p '+'
 			mov ecx, [BigNumber ptr [eax]].Len
-			.if ecx >= [BigNumber ptr [ebx]].Len
-			; ≈сли первое BN1_p >= BN2_p
+			.if ecx > [BigNumber ptr [ebx]].Len
+			; ≈сли первое BN1_p > BN2_p
 				push edx
 				invoke bignum_sub_plus_plus, [BN_res_p], [BN1_p], [BN2_p]
 				pop edx
 				mov [BigNumber ptr [edx]].Sig, 0
+
+			.elseif ecx == [BigNumber ptr [ebx]].Len
+			; Ќужно добавить еще сравнение бќльших разр€дов при равенстве длин чисел!
+				push edx
+				mov eax, [BigNumber ptr [eax]].Num_p
+				mov edx, [BigNumber ptr [ebx]].Len
+				mov ebx, [BigNumber ptr [ebx]].Num_p
+
+				dec ecx
+				dec edx
+				mov esi, [eax+ecx*4]
+				mov edi, [ebx+edx*4]
+
+				.if esi >= edi
+					invoke bignum_sub_plus_plus, [BN_res_p], [BN1_p], [BN2_p]
+					pop edx
+					mov [BigNumber ptr [edx]].Sig, 0						
+				.else 
+					invoke bignum_sub_plus_plus, [BN_res_p], [BN2_p], [BN1_p]
+					pop edx
+					mov [BigNumber ptr [edx]].Sig, 1					
+				.endif
 			.else
 				push edx
 				invoke bignum_sub_plus_plus, [BN_res_p], [BN2_p], [BN1_p]
@@ -804,6 +875,28 @@ bignum_sub proc uses eax ebx ecx edx esi edi BN_res_p: dword, BN1_p: dword, BN2_
 				invoke bignum_sub_plus_plus, [BN_res_p], [BN2_p], [BN1_p]
 				pop edx
 				mov [BigNumber ptr [edx]].Sig, 0
+
+			.elseif ecx == [BigNumber ptr [ebx]].Len
+			; Ќужно добавить еще сравнение бќльших разр€дов при равенстве чисел!
+				push edx
+				mov eax, [BigNumber ptr [eax]].Num_p
+				mov edx, [BigNumber ptr [ebx]].Len
+				mov ebx, [BigNumber ptr [ebx]].Num_p
+
+				dec ecx
+				dec edx
+				mov esi, [eax+ecx*4]
+				mov edi, [ebx+edx*4]
+
+				.if esi >= edi
+					invoke bignum_sub_plus_plus, [BN_res_p], [BN1_p], [BN2_p]
+					pop edx
+					mov [BigNumber ptr [edx]].Sig, 1						
+				.else 
+					invoke bignum_sub_plus_plus, [BN_res_p], [BN2_p], [BN1_p]
+					pop edx
+					mov [BigNumber ptr [edx]].Sig, 0					
+				.endif
 			.else
 				push edx
 				invoke bignum_sub_plus_plus, [BN_res_p], [BN1_p], [BN2_p]
@@ -926,12 +1019,7 @@ main proc stdcall
 
 	invoke bignum_set_str, [BN1_p], $CTA0("-0xFFFFFFFF")
 	invoke bignum_set_str, [BN2_p], $CTA0("0xFFFFFFFF")
-	invoke bignum_set_str, [BN3_p], $CTA0("0x0")
-
-	invoke bignum_print, [BN1_p]
-	invoke bignum_print, [BN2_p]
-	invoke bignum_print, [BN3_p]
-		
+	invoke bignum_set_str, [BN3_p], $CTA0("0x0")		
 
 	invoke bignum_add, [BN3_p], [BN1_p], [BN2_p]
 
@@ -946,6 +1034,18 @@ main proc stdcall
 	invoke bignum_print, [BN3_p]
 
 	invoke bignum_sub, [BN3_p], [BN1_p], [BN2_p]
+
+	invoke bignum_print, [BN1_p]
+	invoke bignum_print, [BN2_p]
+	invoke bignum_print, [BN3_p]
+
+	invoke bignum_add, [BN3_p], [BN1_p], [BN2_p]
+
+	invoke bignum_print, [BN1_p]
+	invoke bignum_print, [BN2_p]
+	invoke bignum_print, [BN3_p]
+
+	invoke bignum_add, [BN3_p], [BN1_p], [BN2_p]
 
 	invoke bignum_print, [BN1_p]
 	invoke bignum_print, [BN2_p]
