@@ -36,6 +36,9 @@ bignum_print proc uses ebx edx ecx edi esi bignum_p: dword
 	dec ecx
 	mov [i], ecx
 
+	.if [BigNumber ptr [ebx]].Sig == 1
+		invoke crt_printf, $CTA0("-")
+	.endif
 	.if [i] == 0
 		mov ecx, [BigNumber ptr [ebx]].Num_p
 		mov ecx, [ecx]
@@ -572,9 +575,9 @@ set_max_num_to_nulls_from_i_to_j endp
 ; BN1 - BN2
 ; BN1 >= BN2!!!
 bignum_sub_plus_plus proc uses eax ebx ecx edx edi esi BN_res_p: dword, BN1_p: dword, BN2_p: dword
-	local loan: dword
-	local tlen: dword 
-	local temp: dword
+	; сслывается на большее число;
+	; в конце, будет браться знак отсюда;
+	local whats_bigger:byte
 	local i: dword
 	; это копия числа BN_2_p.Num_p, в которой мы будем делать изменения и из которой будем вычитать все.
 	; Затем этот указатель будет положен в BN_res_p.Num_p
@@ -602,7 +605,8 @@ bignum_sub_plus_plus proc uses eax ebx ecx edx edi esi BN_res_p: dword, BN1_p: d
 	mov eax, [BN1_p]
 	mov edi, [BigNumber ptr [eax]].Len
 	mov eax, [BigNumber ptr [eax]].Num_p
-
+	
+	mov [i], 0
 	.while [i] < edi
 		mov ecx, [i]
 		mov edx, [eax+ecx*4]
@@ -748,7 +752,8 @@ bignum_add proc uses eax ebx ecx edx edi esi BN_res_p: dword, BN1_p: dword, BN2_
 			mov [BigNumber ptr [edx]].Sig, 1
 		.endif
 	.endif
-
+	
+	ret
 bignum_add endp
 
 
@@ -809,6 +814,7 @@ bignum_sub proc uses eax ebx ecx edx esi edi BN_res_p: dword, BN1_p: dword, BN2_
 		.endif
 	.endif
 
+	ret
 bignum_sub endp
 
 
@@ -918,17 +924,36 @@ main proc stdcall
 	invoke crt_printf, $CTA0("%i\n"), [StrLen]
 	
 
-	invoke bignum_set_str, [BN1_p], $CTA0("0xFFFFFFFF")
+	invoke bignum_set_str, [BN1_p], $CTA0("-0xFFFFFFFF")
 	invoke bignum_set_str, [BN2_p], $CTA0("0xFFFFFFFF")
 	invoke bignum_set_str, [BN3_p], $CTA0("0x0")
-
-	invoke bignum_add, [BN3_p], [BN1_p], [BN2_p]
-	invoke bignum_add, [BN1_p], [BN3_p], [BN2_p]
-;	invoke bignum_sub, [BN3_p], [BN1_p], [BN2_p]
 
 	invoke bignum_print, [BN1_p]
 	invoke bignum_print, [BN2_p]
 	invoke bignum_print, [BN3_p]
+		
+
+	invoke bignum_add, [BN3_p], [BN1_p], [BN2_p]
+
+	invoke bignum_print, [BN1_p]
+	invoke bignum_print, [BN2_p]
+	invoke bignum_print, [BN3_p]
+
+	invoke bignum_add, [BN1_p], [BN3_p], [BN2_p]
+
+	invoke bignum_print, [BN1_p]
+	invoke bignum_print, [BN2_p]
+	invoke bignum_print, [BN3_p]
+
+	invoke bignum_sub, [BN3_p], [BN1_p], [BN2_p]
+
+	invoke bignum_print, [BN1_p]
+	invoke bignum_print, [BN2_p]
+	invoke bignum_print, [BN3_p]
+
+;	invoke bignum_print, [BN1_p]
+;	invoke bignum_print, [BN2_p]
+;	invoke bignum_print, [BN3_p]
 		
 	invoke crt_system, $CTA0("pause")
 	mov eax, 0
