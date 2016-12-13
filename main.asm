@@ -316,6 +316,8 @@ bignum_add_plus_plus proc uses eax ebx ecx edx edi esi BN_res_p: dword, BN1_p: d
 	mov ebx, BN2_p
 	mov ecx, [BigNumber ptr [eax]].Len
 	mov edx, [BigNumber ptr [ebx]].Len
+
+
 	.if ecx >= edx
 		mov [Bigger], eax
 		mov [Smaller], ebx
@@ -352,6 +354,52 @@ bignum_add_plus_plus proc uses eax ebx ecx edx edi esi BN_res_p: dword, BN1_p: d
 	.endw
 	; заполнили 0 разряды!
 
+	; теперь проверка на 0 хотя бы одного из чисел
+	mov eax, BN1_p
+	mov ebx, BN2_p
+	mov ecx, [BigNumber ptr [eax]].Len
+	mov edx, [BigNumber ptr [ebx]].Len
+
+
+	.if ecx == 1
+		mov esi, [BigNumber ptr [eax]].Num_p
+		mov edi, [esi]
+		.if edi == 0			
+			mov eax, BN_res_p
+			mov eax, [BigNumber ptr [eax]].Num_p
+			mov ebx, [BigNumber ptr [ebx]].Num_p
+			mov [i], 0
+			.while [i] < edx
+				mov ecx, [i]
+				mov edi, [ebx+ecx*4]
+				mov [eax+ecx*4], edi 
+				inc [i]
+			.endw
+			mov eax, BN_res_p
+			mov [BigNumber ptr [eax]].Len, edx
+			ret
+		.endif
+	.endif
+
+	.if edx == 1
+		mov esi, [BigNumber ptr [ebx]].Num_p
+		mov edi, [esi]
+		.if edi == 0			
+			mov edx, BN_res_p
+			mov edx, [BigNumber ptr [edx]].Num_p
+			mov ebx, [BigNumber ptr [eax]].Num_p
+			mov [i], 0
+			.while [i] < ecx
+				mov eax, [i]
+				mov edi, [ebx+eax*4]
+				mov [edx+eax*4], edi 
+				inc [i]
+			.endw
+			mov edx, BN_res_p
+			mov [BigNumber ptr [edx]].Len, ecx
+			ret
+		.endif
+	.endif
 
 	; вначале складываются оба числа
 	mov [i], 0
@@ -974,15 +1022,157 @@ bignum_xor proc uses eax ebx ecx edx edi esi BN_res_p: dword, BN1_p: dword, BN2_
 bignum_xor endp
 
 bignum_or proc uses eax ebx ecx edx edi esi BN_res_p: dword, BN1_p: dword, BN2_p: dword
+	local i:dword
+
+	mov eax, [BN1_p]
+	mov ebx, [BN2_p]
+	mov edx, [BN_res_p]
+	mov edx, [BigNumber ptr [edx]].Num_p
+	
+	.if ecx < [BigNumber ptr [ebx]].Len
+		mov eax, [BN1_p]
+		mov ebx, [BN2_p]
+		mov ecx, [BigNumber ptr [eax]].Len
+	.else
+		mov eax, [BN2_p]
+		mov ebx, [BN1_p]
+		mov ecx, [BigNumber ptr [eax]].Len
+	.endif
+
+	mov [i], 0
+	.while [i] < ecx 
+		push eax
+		push ebx
+		push ecx
+		
+		mov eax, [BigNumber ptr [eax]].Num_p
+		mov ebx, [BigNumber ptr [ebx]].Num_p
+		mov ecx, [i]
+
+		mov eax, [eax+ecx*4]
+		mov ebx, [ebx+ecx*4]
+
+		or eax, ebx
+		mov [edx+ecx*4], eax
+
+		pop ecx
+		pop ebx
+		pop eax
+		inc [i]
+	.endw
+
+	mov ecx, [BigNumber ptr [ebx]].Len
+	.while [i] < ecx
+		push eax
+		push ebx
+		push ecx
+		
+		mov eax, [BigNumber ptr [eax]].Num_p
+		mov ebx, [BigNumber ptr [ebx]].Num_p
+		mov ecx, [i]
+
+		mov eax, [ebx+ecx*4]
+		mov [edx+ecx*4], eax
+
+		pop ecx
+		pop ebx
+		pop eax
+		inc [i]		
+	.endw
+
+	ret
 
 bignum_or endp
 
 bignum_and proc uses eax ebx ecx edx edi esi BN_res_p: dword, BN1_p: dword, BN2_p: dword
+	local i:dword
+
+	mov eax, [BN1_p]
+	mov ebx, [BN2_p]
+	mov edx, [BN_res_p]
+	mov edx, [BigNumber ptr [edx]].Num_p
+	
+	.if ecx < [BigNumber ptr [ebx]].Len
+		mov eax, [BN1_p]
+		mov ebx, [BN2_p]
+		mov ecx, [BigNumber ptr [eax]].Len
+	.else
+		mov eax, [BN2_p]
+		mov ebx, [BN1_p]
+		mov ecx, [BigNumber ptr [eax]].Len
+	.endif
+
+	mov [i], 0
+	.while [i] < ecx 
+		push eax
+		push ebx
+		push ecx
+		
+		mov eax, [BigNumber ptr [eax]].Num_p
+		mov ebx, [BigNumber ptr [ebx]].Num_p
+		mov ecx, [i]
+
+		mov eax, [eax+ecx*4]
+		mov ebx, [ebx+ecx*4]
+
+		and eax, ebx
+		mov [edx+ecx*4], eax
+
+		pop ecx
+		pop ebx
+		pop eax
+		inc [i]
+	.endw
+
+	mov ecx, [BigNumber ptr [ebx]].Len
+	.while [i] < ecx
+		push eax
+		push ebx
+		push ecx
+		
+		mov eax, [BigNumber ptr [eax]].Num_p
+		mov ebx, [BigNumber ptr [ebx]].Num_p
+		mov ecx, [i]
+
+		mov eax, [ebx+ecx*4]
+		mov [edx+ecx*4], eax
+
+		pop ecx
+		pop ebx
+		pop eax
+		inc [i]		
+	.endw
+
+	ret
 
 bignum_and endp
 
-bignum_mul_ui proc  uses eax ebx ecx edx edi esi BN_res_p: dword, BN1_p: dword, BN2_p: dword
+bignum_mul_ui proc  uses eax ebx ecx edx edi esi BN_res_p: dword, BN1_p: dword, count: dword
+	local tBN_p: dword
+	local i: dword
 
+	invoke crt_malloc, sizeof(BigNumber)
+	mov [tBN_p], eax
+	invoke bignum_set_str, [tBN_p], $CTA0("0x0")
+	
+	mov ecx, [count]
+	mov [i], 0
+	.while [i] < ecx
+		push ecx
+		invoke bignum_add, [BN_res_p], [tBN_p], [BN1_p]
+		mov ebx, [tBN_p]
+		invoke crt_free, [BigNumber ptr [ebx]].Num_p
+		mov eax, [BN_res_p]
+		mov edx, [BigNumber ptr [eax]].Len
+		mov eax, [BigNumber ptr [eax]].Num_p
+		mov ebx, [tBN_p]
+		mov [BigNumber ptr [ebx]].Num_p, eax
+		mov [BigNumber ptr [ebx]].Len, edx
+		inc [i]
+		pop ecx
+	.endw
+
+	ret
 bignum_mul_ui endp
 
 
@@ -997,63 +1187,22 @@ main proc stdcall
 	
 	invoke crt_malloc, sizeof(BigNumber)
 	mov [BN1_p], eax
-	invoke bignum_init_null, [BN1_p], 50
 	
 	invoke crt_malloc, sizeof(BigNumber)
 	mov [BN2_p], eax
-	invoke bignum_init_null, [BN2_p], 50
 
 	invoke crt_malloc, sizeof(BigNumber)
 	mov [BN3_p], eax
-	invoke bignum_init_null, [BN3_p], 50
 
-	
-	invoke crt_malloc, 12
-	mov [Str_1], eax
-	invoke crt_strcpy, [Str_1], $CTA0("HELLO_WORLD")
-
-	invoke crt_strlen, [Str_1]
-	mov [StrLen], eax
-	invoke crt_printf, $CTA0("%i\n"), [StrLen]
-	
-
-	invoke bignum_set_str, [BN1_p], $CTA0("-0xFFFFFFFF")
+	invoke bignum_set_str, [BN1_p], $CTA0("0x1FFFFFFFF")
 	invoke bignum_set_str, [BN2_p], $CTA0("0xFFFFFFFF")
 	invoke bignum_set_str, [BN3_p], $CTA0("0x0")		
 
-	invoke bignum_add, [BN3_p], [BN1_p], [BN2_p]
+	invoke bignum_mul_ui, [BN3_p], [BN1_p], 1000
 
 	invoke bignum_print, [BN1_p]
 	invoke bignum_print, [BN2_p]
 	invoke bignum_print, [BN3_p]
-
-	invoke bignum_add, [BN1_p], [BN3_p], [BN2_p]
-
-	invoke bignum_print, [BN1_p]
-	invoke bignum_print, [BN2_p]
-	invoke bignum_print, [BN3_p]
-
-	invoke bignum_sub, [BN3_p], [BN1_p], [BN2_p]
-
-	invoke bignum_print, [BN1_p]
-	invoke bignum_print, [BN2_p]
-	invoke bignum_print, [BN3_p]
-
-	invoke bignum_add, [BN3_p], [BN1_p], [BN2_p]
-
-	invoke bignum_print, [BN1_p]
-	invoke bignum_print, [BN2_p]
-	invoke bignum_print, [BN3_p]
-
-	invoke bignum_add, [BN3_p], [BN1_p], [BN2_p]
-
-	invoke bignum_print, [BN1_p]
-	invoke bignum_print, [BN2_p]
-	invoke bignum_print, [BN3_p]
-
-;	invoke bignum_print, [BN1_p]
-;	invoke bignum_print, [BN2_p]
-;	invoke bignum_print, [BN3_p]
 		
 	invoke crt_system, $CTA0("pause")
 	mov eax, 0
