@@ -667,6 +667,11 @@ bignum_sub_plus_plus proc uses eax ebx ecx edx edi esi BN_res_p: dword, BN1_p: d
 		mov [ebx+ecx*4], edx
 		inc [i]		
 	.endw
+	mov ebx, [BN_res_p]
+	mov eax, [BN1_p]
+
+	mov ecx, [BigNumber ptr [eax]].Len
+	mov [BigNumber ptr [ebx]].Len, ecx
 	; скопировали число
 
 	mov eax, [BN2_p]
@@ -687,7 +692,6 @@ bignum_sub_plus_plus proc uses eax ebx ecx edx edi esi BN_res_p: dword, BN1_p: d
 		.if [ebx+ecx*4] >= edx
 			sub [ebx+ecx*4], edx
 		.else
-		; вот тут шляпа	
 			push eax
 			invoke find_first_not_null_index, [BN1_p], [i]
 			; сначала ищем ненулевой разряд для заема
@@ -937,13 +941,13 @@ bignum_sub proc uses eax ebx ecx edx esi edi BN_res_p: dword, BN1_p: dword, BN2_
 				mov edi, [ebx+edx*4]
 
 				.if esi >= edi
-					invoke bignum_sub_plus_plus, [BN_res_p], [BN1_p], [BN2_p]
-					pop edx
-					mov [BigNumber ptr [edx]].Sig, 1						
-				.else 
 					invoke bignum_sub_plus_plus, [BN_res_p], [BN2_p], [BN1_p]
 					pop edx
-					mov [BigNumber ptr [edx]].Sig, 0					
+					mov [BigNumber ptr [edx]].Sig, 0						
+				.else 
+					invoke bignum_sub_plus_plus, [BN_res_p], [BN1_p], [BN2_p]
+					pop edx
+					mov [BigNumber ptr [edx]].Sig, 1					
 				.endif
 			.else
 				push edx
@@ -1168,6 +1172,10 @@ bignum_mul_ui proc  uses eax ebx ecx edx edi esi BN_res_p: dword, BN1_p: dword, 
 		mov ebx, [tBN_p]
 		mov [BigNumber ptr [ebx]].Num_p, eax
 		mov [BigNumber ptr [ebx]].Len, edx
+		; копируем знак
+		mov edx, [BN1_p]
+		mov cl, [BigNumber ptr [edx]].Sig
+		mov [BigNumber ptr [ebx]].Sig, cl
 		inc [i]
 		pop ecx
 	.endw
@@ -1194,11 +1202,14 @@ main proc stdcall
 	invoke crt_malloc, sizeof(BigNumber)
 	mov [BN3_p], eax
 
-	invoke bignum_set_str, [BN1_p], $CTA0("0x1FFFFFFFF")
-	invoke bignum_set_str, [BN2_p], $CTA0("0xFFFFFFFF")
-	invoke bignum_set_str, [BN3_p], $CTA0("0x0")		
+	invoke bignum_set_str, [BN1_p], $CTA0("0xFFFFFFFF")
+	invoke bignum_set_str, [BN2_p], $CTA0("-0x2ed234762AFAFFFFFFFFFF")
+	invoke bignum_set_str, [BN3_p], $CTA0("0x0")
 
-	invoke bignum_mul_ui, [BN3_p], [BN1_p], 1000
+	invoke bignum_sub, [BN3_p], [BN1_p], [BN2_p]
+	invoke bignum_sub, [BN1_p], [BN3_p], [BN2_p]
+	invoke bignum_sub, [BN2_p], [BN3_p], [BN1_p]
+
 
 	invoke bignum_print, [BN1_p]
 	invoke bignum_print, [BN2_p]
